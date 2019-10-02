@@ -4,6 +4,11 @@
     "outDir": "./dist/commonjs",
     "module": "commonjs",
     "target": "es5",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "noImplicitReturns": true,
+    "strict": true,
     "declaration": true,
     "moduleResolution": "node",
     "esModuleInterop": true,
@@ -13,8 +18,7 @@
       "es6",
       "es2015",
       "dom"
-    ],
-
+    ]
   },
   "files": [
     "./src/index.ts"

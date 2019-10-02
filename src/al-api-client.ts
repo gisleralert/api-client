@@ -1,15 +1,20 @@
 /**
  * Module to deal with discovering available endpoints
  */
-import axios, { AxiosInstance, AxiosResponse, AxiosRequestConfig, AxiosError } from 'axios';
+import {
+  AlLocation,
+  AlLocationContext,
+  AlLocatorService,
+  AlStopwatch,
+  AlTriggerStream,
+} from '@al/common';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import * as base64JS from 'base64-js';
 import cache from 'cache';
 import * as qs from 'qs';
-import * as base64JS from 'base64-js';
-import { AIMSSessionDescriptor, AIMSAccount } from './types/aims-stub.types';
-import { AlLocatorService, AlLocation, AlLocationDescriptor, AlLocationContext } from '@al/common/locator';
-import { AlStopwatch, AlTriggerStream } from '@al/common';
-import { AlRequestDescriptor } from './utility';
 import { AlClientBeforeRequestEvent } from './events';
+import { AIMSSessionDescriptor } from './types/aims-stub.types';
+import { AlRequestDescriptor } from './utility';
 
 interface AlApiTarget {
   host: string;
@@ -58,7 +63,7 @@ export class AlApiClient
 {
   public events:AlTriggerStream = new AlTriggerStream();
   public verbose:boolean = false;
-  public defaultAccountId:string = null;        //  If specified, uses *this* account ID to resolve endpoints if no other account ID is explicitly specified
+  public defaultAccountId?:string;        //  If specified, uses *this* account ID to resolve endpoints if no other account ID is explicitly specified
 
   /**
    * Service specific fallback params
@@ -71,7 +76,7 @@ export class AlApiClient
   };
 
   private cache = new cache(60000);
-  private instance:AxiosInstance = null;
+  private instance:AxiosInstance|null = null;
 
   constructor() {}
 
@@ -81,6 +86,11 @@ export class AlApiClient
   public async get(config: APIRequestParams) {
     let normalized = await this.normalizeRequest( config );
     const queryParams = qs.stringify(config.params);
+
+    if (typeof normalized.url !== 'string') {
+      throw new Error('get config url needed a string');
+    }
+
     let fullUrl = normalized.url;
     if (queryParams.length > 0) {
       fullUrl = `${fullUrl}?${queryParams}`;
@@ -115,6 +125,9 @@ export class AlApiClient
   public async post(config: APIRequestParams) {
     config.method = 'POST';
     const normalized = await this.normalizeRequest( config );
+    if (typeof normalized.url !== 'string') {
+      throw new Error('post config url needed a string');
+    }
     this.deleteCachedValue( normalized.url );
     this.log(`APIClient::XHR POST ${normalized.url}` );
     const response = await this.axiosRequest( normalized );
@@ -130,6 +143,9 @@ export class AlApiClient
         'Content-Type': 'multipart/form-data'
     };
     const normalized = await this.normalizeRequest( config );
+    if (typeof normalized.url !== 'string') {
+      throw new Error('form config url needed a string');
+    }
     this.deleteCachedValue( normalized.url );
     const response = await this.axiosRequest( normalized );
     return response.data;
@@ -141,6 +157,9 @@ export class AlApiClient
   public async put(config: APIRequestParams) {
     config.method = 'PUT';
     const normalized = await this.normalizeRequest( config );
+    if (typeof normalized.url !== 'string') {
+      throw new Error('put config url needed a string');
+    }
     this.deleteCachedValue( normalized.url );
     this.log(`APIClient::XHR PUT ${normalized.url}` );
     const response = await this.axiosRequest( normalized );
@@ -160,6 +179,9 @@ export class AlApiClient
   public async delete(config: APIRequestParams) {
     config.method = 'DELETE';
     const normalized = await this.normalizeRequest( config );
+    if (typeof normalized.url !== 'string') {
+      throw new Error('delete config url needed a string');
+    }
     this.deleteCachedValue( normalized.url );
     this.log(`APIClient::XHR DELETE ${normalized.url}` );
     const response = await this.axiosRequest( normalized );
@@ -169,9 +191,8 @@ export class AlApiClient
   /**
    * Create a request descriptor interface
    */
-  public request<ResponseType>( method:string ):AlRequestDescriptor<ResponseType> {
-    const descriptor = new AlRequestDescriptor<ResponseType>( this.executeRequest, method );
-    return descriptor;
+  public request<ResponseType>():AlRequestDescriptor<ResponseType> {
+    return new AlRequestDescriptor<ResponseType>(this.executeRequest);
   }
 
   public async executeRequest<ResponseType>( options:APIRequestParams ):Promise<AxiosResponse<ResponseType>> {
@@ -188,7 +209,7 @@ export class AlApiClient
    * @param {AlLocationContext} The effective location context.  See @al/common/locator for more information.
    */
   /* istanbul ignore next */
-  public setLocations( locations:AlLocationDescriptor[], actingUri:string|boolean = true, context:AlLocationContext = null ) {
+  public setLocations() {
       throw new Error("Please use AlLocatorService.setLocations to update location metadata." );
   }
 
@@ -203,7 +224,7 @@ export class AlApiClient
    * @param {string} accessibleLocations If provided, should be a list of accessible locations service location codes.
    */
   /* istanbul ignore next */
-  public setLocationContext( environment:string, residency?:string, locationId?:string, accessibleLocations?:string[] ) {
+  public setLocationContext() {
       throw new Error("Please use AlLocatorService.setContext to override location context." );
   }
 
@@ -211,7 +232,7 @@ export class AlApiClient
    * @deprecated
    */
   /* istanbul ignore next */
-  public resolveLocation( locTypeId:string, path:string = null, context:AlLocationContext = null ) {
+  public resolveLocation( locTypeId:string, path:string|null = null, context:AlLocationContext|null = null ) {
     console.warn("Deprecation notice: please use AlLocatorService.resolveURL to calculate resource locations." );
     return AlLocatorService.resolveURL( locTypeId, path, context );
   }
@@ -274,12 +295,11 @@ export class AlApiClient
         return btoa( data );
     }
     let utf8Data = unescape( encodeURIComponent( data ) );        //  forces conversion to utf8 from utf16, because...  not sure why
-    let bytes = [];
+    const bytes:number[] = [];
     for ( let i = 0; i < utf8Data.length; i++ ) {
       bytes.push( utf8Data.charCodeAt( i ) );
     }
-    let result = base64JS.fromByteArray( bytes );
-    return result;
+    return base64JS.fromByteArray(bytes as any); // any because im assuming this works
   }
 
   /**
@@ -301,15 +321,14 @@ export class AlApiClient
    *
    * Node that 'endpoint_type' here is only useful with value 'api', and this value has been hardcoded into paths for the time being.
    */
-  public async getEndpoint(params: APIRequestParams): Promise<AxiosResponse<any>> {
+  public async getEndpoint(params: APIRequestParams): Promise<AxiosResponse<{[i:string]:string}>> {
     const defaultEndpoint = this.getDefaultEndpoint();
     let resolveAccountId = '0';
-    if ( params.hasOwnProperty( 'account_id' ) ) {
+    if ( params.hasOwnProperty( 'account_id' ) && params.account_id ) {
       resolveAccountId = params.account_id;
     } else if ( this.defaultAccountId ) {
       resolveAccountId = this.defaultAccountId;
     }
-    let accountId = params.hasOwnProperty( 'account_id' ) ? params.account_id : '0';
     const uri = `https://${defaultEndpoint.global}/endpoints/v1/${resolveAccountId}/residency/default/services/${params.service_name}/endpoint/api`;
 
     const cachedValue = this.cache.get(uri);
@@ -329,7 +348,7 @@ export class AlApiClient
   public async calculateEndpointURI( params: APIRequestParams ):Promise<AlApiTarget> {
     const defaultEndpoint = this.getDefaultEndpoint();
     let fullPath = '';
-    if ( ! params.service_name ) {
+    if ( !params.service_name ) {
       throw new Error("Usage error: calculateEndpointURI requires a service_name to work properly." );
     }
     fullPath += `/${params.service_name}`;
@@ -343,11 +362,11 @@ export class AlApiClient
     if (params.account_id && params.account_id !== '0') {
       fullPath += `/${params.account_id}`;
     }
-    if (params.hasOwnProperty('path') && params.path.length > 0 ) {
+    if (params.hasOwnProperty('path') && params.path && params.path.length > 0 ) {
       fullPath += ( params.path[0] === '/' ? '' : '/' )  + params.path;
     }
     return this.getEndpoint(params)
-      .then(serviceURI => ({ host: serviceURI.data[params.service_name], path: fullPath }))
+      .then(serviceURI => ({ host: serviceURI.data[params.service_name as string], path: fullPath }))
       .catch(() => ({ host: defaultEndpoint.global, path: fullPath }));
   }
 
@@ -437,7 +456,14 @@ export class AlApiClient
    * Utility method to determine whether a given response is a retryable error.
    */
   isRetryableError( error:AxiosResponse, config:APIRequestParams, attemptIndex:number ) {
-    if ( ! config.hasOwnProperty("retry_count" ) || attemptIndex >= config.retry_count ) {
+
+    if (!config.hasOwnProperty('retry_count')) {
+      return false;
+    }
+    if(config.retry_count === undefined){
+      return undefined;
+    }
+    if (attemptIndex >= config.retry_count) {
       return false;
     }
     if ( ! error ) {
@@ -482,15 +508,12 @@ export class AlApiClient
    * Are we running in a browser?
    */
   private isBrowserBased() {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    return true;
+    return typeof window !== 'undefined';
   }
 
   private log( text:string, ...otherArgs:any[] ) {
       if ( this.verbose ) {
-          console.log.apply( console, arguments );
+          console.log.apply( console, [text,...otherArgs] );
       }
   }
 }

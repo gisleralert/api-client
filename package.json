@@ -37,6 +37,7 @@
     "interactive": "npm run build && node -i -e \"const ALClient = require('./dist/commonjs/index.js').ALClient;\""
   },
   "devDependencies": {
+    "@types/base64-js": "^1.2.5",
     "@types/chai": "^4.1.7",
     "@types/mocha": "^5.2.5",
     "@types/qs": "^6.5.1",

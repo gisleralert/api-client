@@ -6,9 +6,8 @@
  *  @copyright Alert Logic Inc, 2019.
  */
 
+import { AlCabinet, AlSchemaValidator } from '@al/common';
 import { AxiosResponse } from 'axios';
-import { AlCabinet } from '@al/common';
-import { AlSchemaValidator } from '@al/common/schema-validator';
 
 export type AlRequestTypeConverter<ResponseType> = { (rawData:any, response?:AxiosResponse):ResponseType };
 type RequestExecutor<ResponseType> = { (options:any):Promise<AxiosResponse<ResponseType>> };
@@ -19,7 +18,7 @@ type RequestExecutor<ResponseType> = { (options:any):Promise<AxiosResponse<Respo
  */
 export class AlRequestDescriptor<ResponseType>
 {
-    protected executor:RequestExecutor<ResponseType> = null;
+    protected executor!:RequestExecutor<ResponseType>;
     protected data:any                          =   {};
     protected method:string                     =   "GET";
     protected credentials:boolean               =   true;
@@ -29,9 +28,9 @@ export class AlRequestDescriptor<ResponseType>
     protected cacheTTL:number                   =   0;
     protected maxRetryCount:number              =   0;
     protected schema:any                        =   null;
-    protected converter:AlRequestTypeConverter<ResponseType> = null;
+    protected converter:AlRequestTypeConverter<ResponseType>|null = null;
 
-    constructor( executor:RequestExecutor<ResponseType>, method:string = "GET" ) {
+    constructor( executor:RequestExecutor<ResponseType> ) {
         this.executor = executor;
     }
 
