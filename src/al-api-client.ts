@@ -137,6 +137,21 @@ export class AlApiClient
   }
 
   /**
+   * Force browser cache delete of this GET request.
+   */
+  public async forceBrowserCacheDelete(config: APIRequestParams) {
+    config.method = 'GET';
+    let normalized = await this.normalizeRequest( config );
+    let queryParams = '';
+    if ( config.params ) {
+      queryParams = Object.entries( config.params ).map( ( [ p, v ] ) => `${p}=${encodeURIComponent( typeof( v ) === 'string' ? v : v.toString() )}` ).join("&");     //  qs.stringify in 1 line
+    }
+    let fullUrl = `${normalized.url}${queryParams.length>0?'?'+queryParams:''}`;
+
+    return caches.delete(fullUrl);
+  }
+
+  /**
    * GET - Return Cache, or Call for updated data
    */
   public async get(config: APIRequestParams) {
