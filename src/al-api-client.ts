@@ -40,6 +40,7 @@ export interface APIRequestParams extends AxiosRequestConfig {
   ttl?: number|boolean;
   cacheKey?:string;
   disableCache?:boolean;
+  flushBrowserCache?:boolean;
 
   /**
    * If automatic retry functionality is desired, specify the maximum number of retries and interval multiplier here.
@@ -147,6 +148,15 @@ export class AlApiClient
       queryParams = Object.entries( config.params ).map( ( [ p, v ] ) => `${p}=${encodeURIComponent( typeof( v ) === 'string' ? v : v.toString() )}` ).join("&");     //  qs.stringify in 1 line
     }
     let fullUrl = `${normalized.url}${queryParams.length>0?'?'+queryParams:''}`;
+
+    if ( config.flushBrowserCache ) {
+      try {
+        return caches.delete( fullUrl );
+      } catch( e ) {
+        console.log( `Cache deletion error: `, e );
+        return;
+      }
+    }
 
     //  Check for data in cache
     let cacheTTL = 0;
